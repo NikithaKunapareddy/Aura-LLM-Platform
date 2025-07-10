@@ -19,3 +19,16 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+## Additional Notes
+
+This project uses the following open-source technologies:
+- Google Gemma Model (subject to Google's terms)
+- Hugging Face Transformers (Apache 2.0 License)
+- React (MIT License)
+- FastAPI (MIT License)
+- Tailwind CSS (MIT License)
+
+Please ensure compliance with all respective licenses when using this software.
