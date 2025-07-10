@@ -27,14 +27,16 @@ def check_dependencies():
     
     return missing_packages
 
+
 def main():
+
     print("🚀 Starting LLM Chat Backend...")
     print(f"Python executable: {sys.executable}")
     print(f"Working directory: {os.getcwd()}")
-    
+
     # Check dependencies
     missing = check_dependencies()
-    
+
     if missing:
         print(f"\n⚠️  Missing packages: {', '.join(missing)}")
         print("Please install them with:")
@@ -45,7 +47,7 @@ def main():
     try:
         print("\n🌟 All dependencies found! Starting FastAPI server...")
         import uvicorn
-        
+
         uvicorn.run(
             "gemma_api:app",
             host="0.0.0.0",
