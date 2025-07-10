@@ -40,7 +40,7 @@ def main():
         print("Please install them with:")
         print(f"pip install {' '.join(missing)}")
         return False
-    
+
     # Try to start the server
     try:
         print("\n🌟 All dependencies found! Starting FastAPI server...")
@@ -53,12 +53,13 @@ def main():
             reload=True,
             log_level="info"
         )
-        
+
     except Exception as e:
         print(f"❌ Error starting server: {e}")
         return False
-    
+
     return True
+
 
 if __name__ == "__main__":
     main()
