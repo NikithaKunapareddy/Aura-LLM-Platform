@@ -5,6 +5,8 @@ Simple backend starter script to test if everything is working.
 import sys
 import os
 
+
+
 def check_dependencies():
     """Check if required dependencies are installed."""
     required_packages = [
