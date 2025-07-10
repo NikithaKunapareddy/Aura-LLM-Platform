@@ -6,7 +6,6 @@ import sys
 import os
 
 
-
 def check_dependencies():
     """Check if required dependencies are installed."""
     required_packages = [
@@ -16,9 +15,9 @@ def check_dependencies():
         'torch',
         'transformers'
     ]
-    
+
     missing_packages = []
-    
+
     for package in required_packages:
         try:
             __import__(package)
@@ -26,7 +25,7 @@ def check_dependencies():
         except ImportError:
             print(f"❌ {package} is missing")
             missing_packages.append(package)
-    
+
     return missing_packages
 
 
