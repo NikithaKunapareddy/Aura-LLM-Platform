@@ -6,12 +6,13 @@ import ChatInterface from './components/ChatInterface';
 import TextGeneration from './components/TextGeneration';
 import apiService from './services/api';
 import mockApiService from './services/mockApi';
+import { cn } from './utils';
 
 function App() {
   const [currentView, setCurrentView] = useState<AppView>('personas');
   const [selectedPersona, setSelectedPersona] = useState<Persona | null>(null);
   const [currentMode, setCurrentMode] = useState<'chat' | 'generate'>('chat');
-  const [useMockAPI, setUseMockAPI] = useState(true); // Start with mock API
+  const [useMockAPI, setUseMockAPI] = useState(false); // Start with real backend
   const [apiConnected, setApiConnected] = useState(false);
 
   // Get current API service
@@ -38,9 +39,11 @@ function App() {
     testConnection();
   }, []);
 
-  // Handle persona selection
+  // Handle persona selection and open chat immediately
   const handlePersonaSelect = (persona: Persona) => {
     setSelectedPersona(persona);
+    setCurrentView('chat');
+    setCurrentMode('chat');
   };
 
   // Start chat with selected persona

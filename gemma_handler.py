@@ -141,29 +141,20 @@ class GemmaHandler:
             return "I'm having trouble generating a response right now. Please try again!"
     
     def chat_response(
-        self, 
-        message: str, 
-        persona: str = "friend", 
+        self,
+        message: str,
+        persona: str = "friend",
         culture: str = "delhi",
         conversation_history: Optional[list] = None
     ) -> Optional[str]:
         """
         Generate a chat response with persona and culture context.
-        
-        Args:
-            message (str): User message
-            persona (str): Bot persona (friend, mentor, romantic, etc.)
-            culture (str): Cultural context (delhi, japanese, parisian, berlin)
-            conversation_history (list): Previous conversation messages
-            
-        Returns:
-            Optional[str]: Generated response
         """
         from bot_prompts import get_persona_prompt
-        
+
         # Get the persona prompt for ANY message
         persona_prompt = get_persona_prompt(persona, culture)
-        
+
         # Build conversation context
         conversation_context = ""
         if conversation_history:
@@ -171,10 +162,16 @@ class GemmaHandler:
                 role = msg.get('role', 'user')
                 content = msg.get('content', '')
                 conversation_context += f"{role.capitalize()}: {content}\n"
-        
-        # Create a dynamic prompt that includes persona context
-        full_prompt = f"{persona_prompt}\n\nConversation:\n{conversation_context}User: {message}\nAssistant:"
-        
+
+        # Improved prompt for better model guidance
+        full_prompt = (
+            f"You are an AI assistant with the following persona and cultural background.\n"
+            f"Persona: {persona_prompt}\n"
+            f"\nRecent conversation:\n{conversation_context}User: {message}\nAssistant:"
+        )
+
+        self.logger.info(f"[Prompt to model]: {full_prompt}")
+
         # Try to generate with the model first
         response = self.generate_response(
             full_prompt,
@@ -182,11 +179,14 @@ class GemmaHandler:
             temperature=0.8,
             top_p=0.9
         )
-        
+
+        self.logger.info(f"[Model response]: {response}")
+
         # If model generation fails or is too short, create a persona-based response
         if not response or len(response.strip()) < 10:
+            self.logger.warning("Model response too short or empty, using template fallback.")
             response = self._generate_persona_response(message, persona, culture)
-        
+
         return response
 
     def _generate_persona_response(self, message: str, persona: str, culture: str) -> str:
