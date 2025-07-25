@@ -180,6 +180,27 @@ LLM/
 - **Memory Usage**: ~4-6GB VRAM (GPU) or ~8-12GB RAM (CPU)
 - **Generation Settings**: Temperature 0.7-0.9, Top-p 0.9, Top-k 50
 
+---
+
+### 🔑 OpenAI API Key Setup
+
+To use OpenAI models (like GPT-3.5 or GPT-4) for chat and text generation, you must provide your OpenAI API key.
+
+1. **Get your API key:**  
+   - Sign up or log in at [OpenAI Platform](https://platform.openai.com/).
+   - Go to your API keys page and create a new secret key.
+
+2. **Add your key to the `.env` file:**  
+   In the project root, open or create a file named `.env` and add:
+   ```
+   OPENAI_API_KEY=sk-...your-key-here...
+   ```
+
+3. **Do not share your API key publicly.**  
+   Keep your `.env` file private and never commit it to public repositories.
+
+4. **The application will automatically load this key** and use it for OpenAI-powered features.
+
 ### Performance Tips
 - Use GPU acceleration when available (`CUDA_VISIBLE_DEVICES=0`)
 - Adjust `max_new_tokens` based on response length needs

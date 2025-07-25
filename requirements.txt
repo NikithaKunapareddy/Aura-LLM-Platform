@@ -3,6 +3,7 @@ fastapi==0.104.1
 uvicorn[standard]==0.24.0
 python-multipart==0.0.6
 starlette>=0.27.0
+openai
 
 # Machine Learning and AI dependencies
 torch>=2.0.0

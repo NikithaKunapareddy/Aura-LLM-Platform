@@ -16,9 +16,7 @@ from bot_prompts import (
     get_persona_prompt, 
     get_all_personas, 
     get_all_cultures,
-    get_persona_culture_combinations,
     get_text_generation_prompt,
-    get_text_generation_styles
 )
 
 # Configure logging

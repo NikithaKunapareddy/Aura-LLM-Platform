@@ -5,63 +5,49 @@ from typing import Optional, Dict, Any
 import gc
 import os
 from dotenv import load_dotenv
+import openai
 
 # Load environment variables
 load_dotenv()
 
 class GemmaHandler:
-    def __init__(self, model_name: str = "microsoft/DialoGPT-medium"):
+    def __init__(self, model_name: str = "microsoft/DialoGPT-small"):
         """
         Initialize the Gemma handler with the specified model.
-        
-        Args:
-            model_name (str): The name of the model to load
         """
         self.model_name = model_name
         self.tokenizer = None
         self.model = None
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = "cpu"  # Force CPU for reliability
         self.logger = logging.getLogger(__name__)
         self.hf_token = os.getenv("HUGGINGFACE_TOKEN")
         
     def load_model(self) -> bool:
         """
         Load the Gemma model and tokenizer.
-        
-        Returns:
-            bool: True if model loaded successfully, False otherwise
         """
         try:
             self.logger.info(f"Loading model: {self.model_name} on device: {self.device}")
-            
-            # Load tokenizer
             self.tokenizer = AutoTokenizer.from_pretrained(
                 self.model_name,
                 trust_remote_code=True
             )
-            
-            # Add pad token if it doesn't exist
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
-            
-            # Load model with appropriate settings
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_name,
-                torch_dtype=torch.float32,  # Use float32 for CPU
+                torch_dtype=torch.float32,
                 trust_remote_code=True,
                 low_cpu_mem_usage=True
             )
-            
             if self.device == "cpu":
                 self.model = self.model.to(self.device)
-            
             self.logger.info("Model loaded successfully")
             return True
-            
         except Exception as e:
             self.logger.error(f"Failed to load model: {str(e)}")
             return False
-    
+
     def generate_response(
         self, 
         prompt: str, 
@@ -73,40 +59,23 @@ class GemmaHandler:
     ) -> Optional[str]:
         """
         Generate a response using the DialoGPT model.
-        
-        Args:
-            prompt (str): The input prompt
-            max_new_tokens (int): Maximum number of new tokens to generate
-            temperature (float): Sampling temperature
-            top_p (float): Top-p sampling parameter
-            top_k (int): Top-k sampling parameter
-            do_sample (bool): Whether to use sampling
-            
-        Returns:
-            Optional[str]: Generated response or None if generation fails
         """
         if not self.model or not self.tokenizer:
             self.logger.error("Model not loaded. Call load_model() first.")
             return None
-        
         try:
-            # For DialoGPT, we need to format the conversation properly
-            # Add special tokens for conversation
             formatted_prompt = f"{prompt}{self.tokenizer.eos_token}"
-            
-            # Tokenize input
-            inputs = self.tokenizer.encode(
-                formatted_prompt + self.tokenizer.eos_token, 
-                return_tensors="pt"
+            encoded = self.tokenizer(
+                formatted_prompt + self.tokenizer.eos_token,
+                return_tensors="pt",
+                padding=True
             )
-            
-            # Move inputs to device
-            inputs = inputs.to(self.device)
-            
-            # Generate response with more conservative settings for DialoGPT
+            inputs = encoded["input_ids"].to(self.device)
+            attention_mask = encoded["attention_mask"].to(self.device)
             with torch.no_grad():
                 chat_history_ids = self.model.generate(
                     inputs,
+                    attention_mask=attention_mask,
                     max_length=inputs.shape[-1] + max_new_tokens,
                     num_beams=3,
                     temperature=temperature,
@@ -119,27 +88,18 @@ class GemmaHandler:
                     length_penalty=1.0,
                     no_repeat_ngram_size=3
                 )
-            
-            # Extract only the new response (after the input)
             response = self.tokenizer.decode(
                 chat_history_ids[:, inputs.shape[-1]:][0], 
                 skip_special_tokens=True
             )
-            
-            # Clean up the response
             response = response.strip()
-            
-            # If response is empty or too short, provide a fallback
             if not response or len(response.strip()) < 3:
                 return "Hello! I'm here to chat with you. How can I help?"
-            
             return response
-            
         except Exception as e:
             self.logger.error(f"Error generating response: {str(e)}")
-            # Return a fallback response instead of None
             return "I'm having trouble generating a response right now. Please try again!"
-    
+
     def chat_response(
         self,
         message: str,
@@ -151,52 +111,41 @@ class GemmaHandler:
         Generate a chat response with persona and culture context.
         """
         from bot_prompts import get_persona_prompt
-
-        # Get the persona prompt for ANY message
         persona_prompt = get_persona_prompt(persona, culture)
-
-        # Build conversation context
         conversation_context = ""
         if conversation_history:
-            for msg in conversation_history[-3:]:  # Last 3 messages for context
+            for msg in conversation_history[-3:]:
                 role = msg.get('role', 'user')
                 content = msg.get('content', '')
                 conversation_context += f"{role.capitalize()}: {content}\n"
-
-        # Improved prompt for better model guidance
+        example_user = "I love ice cream"
+        example_assistant = self._generate_persona_response(example_user, persona, culture)
         full_prompt = (
-            f"You are an AI assistant with the following persona and cultural background.\n"
-            f"Persona: {persona_prompt}\n"
-            f"\nRecent conversation:\n{conversation_context}User: {message}\nAssistant:"
+            f"You are acting as a {persona} from {culture.title()}.\n"
+            f"Respond to the user in a way that reflects this persona and culture. "
+            f"Be warm, informal, and use local expressions if possible.\n\n"
+            f"Example:\n"
+            f"User: {example_user}\n"
+            f"Assistant: {example_assistant}\n\n"
+            f"{conversation_context}User: {message}\nAssistant:"
         )
-
         self.logger.info(f"[Prompt to model]: {full_prompt}")
-
-        # Try to generate with the model first
         response = self.generate_response(
             full_prompt,
             max_new_tokens=150,
             temperature=0.8,
             top_p=0.9
         )
-
         self.logger.info(f"[Model response]: {response}")
-
-        # If model generation fails or is too short, create a persona-based response
         if not response or len(response.strip()) < 10:
             self.logger.warning("Model response too short or empty, using template fallback.")
             response = self._generate_persona_response(message, persona, culture)
-
         return response
 
     def _generate_persona_response(self, message: str, persona: str, culture: str) -> str:
         """Generate dynamic responses based on persona and culture for ANY message."""
         from bot_prompts import get_persona_prompt
-        
-        # Get the full persona description
         persona_context = get_persona_prompt(persona, culture)
-        
-        # Create a template-based response that incorporates the persona
         persona_styles = {
             "friend": {
                 "delhi": lambda msg: f"Hey! {self._respond_as_friend(msg)} What do you think about this? I'm here to support you!",
@@ -229,14 +178,10 @@ class GemmaHandler:
                 "berlin": lambda msg: f"About '{msg}' - let's be direct and solution-focused. What do you need to achieve?"
             }
         }
-        
-        # Get the response generator for this persona and culture
         response_generator = persona_styles.get(persona, {}).get(culture)
-        
         if response_generator:
             return response_generator(message)
         else:
-            # Fallback for unknown persona/culture combinations
             return f"Thank you for sharing '{message}' with me. I'd love to hear more about your thoughts on this topic!"
 
     def _respond_as_friend(self, message: str) -> str:
@@ -253,23 +198,17 @@ class GemmaHandler:
             return "Relationships are such an important part of life."
         else:
             return "I find what you're saying really interesting."
-    
+
     def generate_text(
         self, 
         prompt: str, 
         style: str = "creative",
-        max_tokens: int = 512
+        max_tokens: int = 512,
+        persona: str = "friend",
+        culture: str = "delhi"
     ) -> Optional[str]:
         """
-        Generate text based on a prompt and style.
-        
-        Args:
-            prompt (str): The text generation prompt
-            style (str): Writing style (creative, formal, casual, etc.)
-            max_tokens (int): Maximum tokens to generate
-            
-        Returns:
-            Optional[str]: Generated text
+        Generate text based on a prompt, style, persona, and culture.
         """
         style_prompts = {
             "creative": "Write in a creative and imaginative style:",
@@ -278,16 +217,25 @@ class GemmaHandler:
             "academic": "Write in an academic and scholarly style:",
             "poetic": "Write in a poetic and artistic style:"
         }
-        
         style_instruction = style_prompts.get(style, style_prompts["creative"])
-        full_prompt = f"{style_instruction}\n\n{prompt}\n\n"
-        
+        example_user = "Describe your favorite dessert."
+        example_assistant = self._generate_persona_response(example_user, persona, culture)
+        full_prompt = (
+            f"{style_instruction}\n"
+            f"You are acting as a {persona} from {culture.title()}.\n"
+            f"Respond in a way that reflects this persona and culture. "
+            f"Be warm, informal, and use local expressions if possible.\n\n"
+            f"Example:\n"
+            f"User: {example_user}\n"
+            f"Assistant: {example_assistant}\n\n"
+            f"User: {prompt}\nAssistant:"
+        )
         return self.generate_response(
             full_prompt,
             max_new_tokens=max_tokens,
             temperature=0.8 if style == "creative" else 0.6
         )
-    
+
     def unload_model(self):
         """Unload the model to free memory."""
         if self.model:
@@ -296,16 +244,15 @@ class GemmaHandler:
         if self.tokenizer:
             del self.tokenizer
             self.tokenizer = None
-        
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         gc.collect()
         self.logger.info("Model unloaded successfully")
-    
+
     def is_loaded(self) -> bool:
         """Check if the model is loaded."""
         return self.model is not None and self.tokenizer is not None
-    
+
     def get_model_info(self) -> Dict[str, Any]:
         """Get information about the loaded model."""
         return {
@@ -314,3 +261,45 @@ class GemmaHandler:
             "is_loaded": self.is_loaded(),
             "cuda_available": torch.cuda.is_available()
         }
+
+    def proactive_mood_response(self, mood: str, persona: str, gender: str = "female") -> str:
+        """
+        Get a proactive response based on mood, persona, and gender.
+        """
+        from bot_prompts import get_proactive_response
+        persona_key = f"{persona}_{gender}"
+        return get_proactive_response(mood, persona_key)
+
+# --- OpenAI Chat Function ---
+
+def openai_chat_response(message: str, persona: str = "friend", culture: str = "delhi", conversation_history: Optional[list] = None) -> str:
+    """
+    Generate a chat response using OpenAI GPT-3.5/4 API.
+    """
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+    system_prompt = f"You are a {persona} from {culture}. Respond informally, warmly, and use local expressions if possible."
+    messages = [{"role": "system", "content": system_prompt}]
+    if conversation_history:
+        for msg in conversation_history[-3:]:
+            messages.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
+    messages.append({"role": "user", "content": message})
+
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",  # or "gpt-4o" if you have access
+        messages=messages,
+        max_tokens=150,
+        temperature=0.8,
+        top_p=0.9
+    )
+    return response.choices[0].message.content.strip()
+
+if __name__ == "__main__":
+    from bot_prompts import get_bot_prompt
+
+    def start_chat(bot_id):
+        prompt = get_bot_prompt(bot_id)
+        print(prompt)  # Or use the prompt in your LLM call
+
+    # Example usage:
+    bot_id = "delhi_mentor_male"  # This can be any key from BOT_PROMPTS
+    start_chat(bot_id)
